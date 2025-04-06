@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using MauiAppTempoAgora.Models;
@@ -12,7 +13,7 @@ namespace MauiAppTempoAgora.Services
 {
     public class DataService
     {
-        public static async Task<Tempo?> GetPrevisao(string cidade) 
+        public static async Task<(Tempo? tempo, HttpStatusCode statusCode)> GetPrevisao(string cidade) 
         {
             Tempo? t = null;
 
@@ -20,40 +21,60 @@ namespace MauiAppTempoAgora.Services
             string url = $"https://api.openweathermap.org/data/2.5/weather?" + 
                          $"q={cidade}&units=metric&appid={apiKey}";
 
-            using(HttpClient client = new())
-            {
-                HttpResponseMessage resp = await client.GetAsync(url);
-
-                if (resp.IsSuccessStatusCode)
+            try 
                 {
-                    string json = await resp.Content.ReadAsStringAsync();
+                
+                using(HttpClient client = new())
+                {
+                    HttpResponseMessage resp = await client.GetAsync(url);
 
-                    var sketch = JObject.Parse(json);
-
-                    DateTime time = new();
-
-                    DateTime sunrise = time.AddSeconds((double)sketch["sys"]["sunrise"]).ToLocalTime();
-                    DateTime sunset = time.AddSeconds((double)sketch["sys"]["sunrise"]).ToLocalTime();
-
-                    t = new()
+                    if (resp.IsSuccessStatusCode)
                     {
-                        lat = (double)sketch["coord"]["lat"],
-                        lon = (double)sketch["coord"]["lon"],
-                        description = (string)sketch["weather"][0]["description"],
-                        main = (string)sketch["weather"][0]["main"],
-                        temp_max = (double)sketch["main"]["temp_max"],
-                        temp_min = (double)sketch["main"]["temp_min"],
-                        sunrise = sunrise.ToString(),
-                        sunset = sunset.ToString(),
-                        speed = (double)sketch["wind"]["speed"],
-                        visibility = (int)sketch["visibility"],
-                    };
+                        string json = await resp.Content.ReadAsStringAsync();
 
-                } // fecha if
+                        var sketch = JObject.Parse(json);
 
-            } // fecha using
+                        DateTime baseTime = DateTime.UnixEpoch;
 
-            return t;
+                        DateTime time = new();
+
+                        DateTime sunrise = time.AddSeconds((double)sketch["sys"]["sunrise"]).ToLocalTime();
+                        DateTime sunset = time.AddSeconds((double)sketch["sys"]["sunrise"]).ToLocalTime();
+
+                        t = new()
+                        {
+                            lat = (double)sketch["coord"]["lat"],
+                            lon = (double)sketch["coord"]["lon"],
+                            description = (string)sketch["weather"][0]["description"],
+                            main = (string)sketch["weather"][0]["main"],
+                            temp_max = (double)sketch["main"]["temp_max"],
+                            temp_min = (double)sketch["main"]["temp_min"],
+                            sunrise = sunrise.ToString(),
+                            sunset = sunset.ToString(),
+                            speed = (double)sketch["wind"]["speed"],
+                            visibility = (int)sketch["visibility"],
+                        };
+
+                        return (t, resp.StatusCode);
+
+                    }
+                    else
+                    {
+                        return (null, resp.StatusCode);
+                    }
+
+                } // fecha using
+
+            } // fecha try
+            catch (HttpRequestException)
+            {
+                return (null, 0);
+            }
+            catch (Exception)
+            {
+                return (null, HttpStatusCode.InternalServerError);
+            }
+
 
         }
 
